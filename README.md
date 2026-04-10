@@ -4,83 +4,88 @@ A modular, event-driven system for processing images, detecting objects, and ena
 
 ## 🏗 Architecture & Technology Stack
 
-The system is built on a **Pub-Sub** architecture using **Redis** as the central nervous system. Services are decoupled, ensuring asynchronicity and resilience.
+The system is built on a **Pub-Sub** architecture using **Redis** as the central nervous system. Services are strictly decoupled, ensuring that no service bypasses the event bus to talk to another's data store.
 
 ### System Diagram
 
 ```mermaid
 graph TD
-    User((CLI Service)) -->|Uploads Image| Ingest[Ingestion Service]
-    User -->|Queries Topic/Image| Query[Query Service]
+    CLI((CLI)) -->|1. Upload| Upload[Upload Service]
     
-    subgraph "Infrastructure"
-        Bus[[Redis Pub/Sub]]
+    subgraph "Event Bus (Redis)"
+        Bus{Redis Pub/Sub}
     end
 
-    subgraph "Services Layer"
-        Ingest -->|image.submitted| Bus
-        Bus -->|image.submitted| Inf[Inference Service: PyTorch]
-        
-        Inf -->|inference.completed| Bus
-        Bus -->|inference.completed| Annot[Annotation Service: Mongo]
-        
-        Annot -->|annotation.stored| Bus
-        Bus -->|annotation.stored| Embed[Embedding Service: FAISS]
-        
-        Embed -->|embedding.created| Bus
+    Upload -->|2. image.submitted| Bus
+    Bus -->|3. image.submitted| Proc[Image Processing]
+    
+    Proc -->|4. objects.detected| Bus
+    Bus -->|5. objects.detected| DocSvc[Document DB Service]
+    
+    DocSvc -->|6. metadata.persisted| Bus
+    Bus -->|7. metadata.persisted| Embed[Embedding Service]
+    
+    Embed -->|8. vectors.created| Bus
+    Bus -->|9. vectors.created| VecSvc[Vector DB Service]
+    
+    VecSvc -->|10. indexing.completed| Bus
+
+    subgraph "Query Path"
+        CLI -->|A. query.submitted| Bus
+        Bus -->|B. query.submitted| VecSvc
+        VecSvc -->|C. similarity.results| Bus
+        Bus -->|D. similarity.results| DocSvc
+        DocSvc -->|E. query.completed| Bus
+        Bus -->|F. query.completed| CLI
     end
 
-    subgraph "Storage Layer"
-        Annot --- DocDB[(MongoDB)]
-        Embed --- VIndex[(FAISS Index)]
-        Ingest --- FileStore[(Local FS / S3)]
+    subgraph "Data Ownership"
+        Upload --- ImgStore[(Local FS)]
+        DocSvc --- Mongo[(MongoDB)]
+        VecSvc --- FAISS[(FAISS Index)]
     end
-
-    Bus -->|query.submitted| Embed
-    Embed -.->|Vectors| Query
-    Annot -.->|Metadata| Query
-    Query -->|query.completed| User
 ```
 
 ### Technology Breakdown
 
 | Service | Technology | Role |
 | :--- | :--- | :--- |
-| **Event Bus** | **Redis** | Handles asynchronous messaging and topic distribution. |
-| **Ingestion** | **Python/FastAPI** | Validates uploads and persists raw images to local storage. |
-| **Inference** | **PyTorch (YOLO)** | Performs object detection and produces classification metadata. |
-| **Annotation**| **MongoDB** | A document-oriented store for flexible, nested object metadata. |
-| **Embedding** | **FAISS** | Manages vector indices for high-dimensional object similarity search. |
-| **Query** | **Python Typer** | Orchestrates metadata lookups and vector similarity results. |
-| **Testing** | **Pytest** | Validates idempotency, robustness, and eventual consistency. |
+| **CLI** | **Python Typer** | Entry point for triggering uploads and searching objects. |
+| **Upload** | **FastAPI** | Validates image files and persists them to the storage layer. |
+| **Image Processing**| **PyTorch (YOLO)** | Detects objects, bounding boxes, and initial labels. |
+| **Document DB** | **MongoDB** | Stores rich, nested JSON metadata for images and detections. |
+| **Embedding** | **CLIP / Transformers** | Generates high-dimensional vectors for detected objects. |
+| **Vector DB** | **FAISS** | Maintains the similarity index and handles vector lookups. |
+| **Event Bus** | **Redis** | Orchestrates asynchronous communication between all services. |
 
 ## 📡 Event Lifecycle
 
-1.  **`image.submitted`**: Triggered by Ingestion. Contains image path and ID.
-2.  **`inference.completed`**: Triggered by Inference. Contains detected objects and bounding boxes.
-3.  **`annotation.stored`**: Triggered by Annotation. Confirms metadata is persisted in MongoDB.
-4.  **`embedding.created`**: Triggered by Embedding. Confirms vectors are indexed in FAISS.
-5.  **`query.submitted`**: Triggered by CLI. Initiates a search across the index and metadata.
+1.  **`image.submitted`**: Ingestion complete; raw image is ready for analysis.
+2.  **`objects.detected`**: Image Processing complete; labels and coordinates found.
+3.  **`metadata.persisted`**: Document DB has stored the detections; ready for vectorization.
+4.  **`vectors.created`**: Embedding Service has generated numerical representations.
+5.  **`indexing.completed`**: Vector DB has updated its index; system is now searchable.
+6.  **`query.submitted`**: User has initiated a search (text or image similarity).
 
 ## 🛡 System Guarantees
 
-*   **Idempotency**: Services check `event_id` against a local cache before processing to prevent duplicate state changes.
-*   **Robustness**: All services utilize defensive validation (Pydantic) to handle malformed events gracefully.
-*   **Eventual Consistency**: The system prioritizes availability; search results reflect the latest processed state as events propagate.
-*   **Deterministic Replay**: The Event Generator can use a fixed seed to replay specific traffic patterns for debugging.
+*   **Idempotency**: Services track `event_id` to prevent duplicate processing of the same image/query.
+*   **Robustness**: Defensive validation ensures that malformed payloads do not crash subscribers.
+*   **Eventual Consistency**: The query path reflects the latest state once the indexing cycle completes.
+*   **Auditability**: The event bus allows for deterministic replay and fault injection testing.
 
 ## 🛠 Directory Structure
 
 ```text
 .
 ├── services/
-│   ├── ingestion/     # Image handling (FastAPI/Local FS)
-│   ├── inference/     # Object Detection (PyTorch/Mock)
-│   ├── annotation/    # Metadata Store (MongoDB)
-│   ├── embedding/     # Vector Search (FAISS)
-│   └── query/         # Orchestrator
-├── common/            # Redis logic, Event schemas (Pydantic)
-├── generator/         # Chaos testing & Event replay
-├── cli/               # CLI Interface (Typer)
-└── tests/             # Idempotency & Consistency tests
+│   ├── cli/               # Typer-based CLI
+│   ├── upload/            # Image ingestion (FastAPI)
+│   ├── image-processing/  # AI Inference (YOLO)
+│   ├── document-db/       # MongoDB Persistence
+│   ├── embedding/         # Vector Generation (CLIP)
+│   └── vector-db/         # Indexing (FAISS)
+├── common/                # Shared Redis & Pydantic logic
+├── generator/             # Testing & Event replay utility
+└── tests/                 # Integration & Fault-injection tests
 ```
