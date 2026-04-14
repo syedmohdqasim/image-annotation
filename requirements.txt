@@ -1,0 +1,7 @@
+redis
+fakeredis
+pydantic>=2.0.0
+typer
+faiss-cpu
+numpy
+pytest
