@@ -1,0 +1,132 @@
+{
+  "img_dc7b9778": {
+    "image_id": "img_dc7b9778",
+    "detections": [
+      {
+        "label": "dog",
+        "confidence": 0.95,
+        "bbox": [
+          10,
+          20,
+          100,
+          200
+        ]
+      },
+      {
+        "label": "tree",
+        "confidence": 0.88,
+        "bbox": [
+          150,
+          50,
+          300,
+          400
+        ]
+      }
+    ],
+    "timestamp": "2026-04-15T00:05:28.263089"
+  },
+  "img_e5e0be1e": {
+    "image_id": "img_e5e0be1e",
+    "detections": [
+      {
+        "label": "dog",
+        "confidence": 0.95,
+        "bbox": [
+          10,
+          20,
+          100,
+          200
+        ]
+      },
+      {
+        "label": "tree",
+        "confidence": 0.88,
+        "bbox": [
+          150,
+          50,
+          300,
+          400
+        ]
+      }
+    ],
+    "timestamp": "2026-04-15T00:57:51.744186"
+  },
+  "img_fb75eecb": {
+    "image_id": "img_fb75eecb",
+    "detections": [
+      {
+        "label": "dog",
+        "confidence": 0.95,
+        "bbox": [
+          10,
+          20,
+          100,
+          200
+        ]
+      },
+      {
+        "label": "tree",
+        "confidence": 0.88,
+        "bbox": [
+          150,
+          50,
+          300,
+          400
+        ]
+      }
+    ],
+    "timestamp": "2026-04-15T00:58:14.664882"
+  },
+  "img_528a0e98": {
+    "image_id": "img_528a0e98",
+    "detections": [
+      {
+        "label": "dog",
+        "confidence": 0.95,
+        "bbox": [
+          10,
+          20,
+          100,
+          200
+        ]
+      },
+      {
+        "label": "tree",
+        "confidence": 0.88,
+        "bbox": [
+          150,
+          50,
+          300,
+          400
+        ]
+      }
+    ],
+    "timestamp": "2026-04-15T00:58:45.443476"
+  },
+  "img_600b823c": {
+    "image_id": "img_600b823c",
+    "detections": [
+      {
+        "label": "dog",
+        "confidence": 0.95,
+        "bbox": [
+          10,
+          20,
+          100,
+          200
+        ]
+      },
+      {
+        "label": "tree",
+        "confidence": 0.88,
+        "bbox": [
+          150,
+          50,
+          300,
+          400
+        ]
+      }
+    ],
+    "timestamp": "2026-04-15T01:09:08.034017"
+  }
+}

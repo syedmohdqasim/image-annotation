@@ -58,6 +58,61 @@ graph TD
 | **Vector DB** | **FAISS** | Maintains the similarity index and handles vector lookups. |
 | **Event Bus** | **Redis** | Orchestrates asynchronous communication between all services. |
 
+## 🚀 Getting Started
+
+### 1. Prerequisites
+- **Python 3.10+**
+- **Redis Server** (See below for installation)
+
+### 2. Install Redis
+On macOS:
+```bash
+brew install redis
+brew services start redis
+```
+
+### 3. Setup Environment
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Running the System
+Start the services in separate terminal windows:
+```bash
+# Terminal 1
+python services/image_processing/service.py
+
+# Terminal 2
+python services/document_db/service.py
+
+# Terminal 3
+python services/embedding/service.py
+
+# Terminal 4
+python services/vector_db/service.py
+```
+
+Then use the CLI:
+```bash
+python services/cli/main.py upload sample_data/test_image.jpg
+python services/cli/main.py search "dog"
+```
+
+## 🧪 Testing
+
+### Unit & Mock Tests
+Run standard tests using `fakeredis`:
+```bash
+pytest
+```
+
+### Real Redis Integration Test
+To run the full end-to-end pipeline test against your local Redis instance:
+```bash
+RUN_REAL_REDIS=true PYTHONPATH=. pytest tests/test_real_redis_pipeline.py
+```
+*Note: This test is skipped by default to avoid failures in CI environments like GitHub Actions.*
+
 ## 📡 Event Lifecycle
 
 1.  **`image.submitted`**: Ingestion complete; raw image is ready for analysis.

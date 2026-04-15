@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import random
@@ -15,12 +16,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("EventBus")
 
 class EventBus:
-    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0, use_mock: bool = False, client: Optional[redis.Redis] = None):
-        self.host = host
-        self.port = port
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, db: int = 0, use_mock: bool = False, client: Optional[redis.Redis] = None):
+        self.host = host or os.getenv("REDIS_HOST", "localhost")
+        self.port = port or int(os.getenv("REDIS_PORT", 6379))
         self.db = db
         self.processed_events = set() # For idempotency checking
-        
+
         if client:
             self.client = client
             return
@@ -29,13 +30,9 @@ class EventBus:
             logger.info("Using Mock Redis (fakeredis)")
             self.client = FakeRedis()
         else:
-            try:
-                self.client = redis.Redis(host=host, port=port, db=db, socket_timeout=5)
-                self.client.ping()
-                logger.info(f"Connected to Redis at {host}:{port}")
-            except redis.ConnectionError:
-                logger.warning(f"Could not connect to Redis at {host}:{port}. Falling back to FakeRedis.")
-                self.client = FakeRedis()
+            self.client = redis.Redis(host=self.host, port=self.port, db=self.db, socket_timeout=5)
+            self.client.ping()
+            logger.info(f"Connected to Redis at {self.host}:{self.port}")
 
     def publish(self, event: BaseEvent):
         """Publishes an event to its corresponding topic."""

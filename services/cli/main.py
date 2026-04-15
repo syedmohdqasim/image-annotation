@@ -20,7 +20,7 @@ def upload(file_path: str):
 
     typer.echo(f"Uploading {file_path}...")
     
-    bus = EventBus(use_mock=True)
+    bus = EventBus()
     svc = UploadService(bus=bus)
     
     image_id, target_path = svc.upload_image(file_path)
@@ -35,7 +35,7 @@ def search(query: str, query_type: str = "text"):
     """
     typer.echo(f"Initiating search: {query} ({query_type})...")
     
-    bus = EventBus(use_mock=True)
+    bus = EventBus()
     query_id = f"q_{uuid.uuid4().hex[:6]}"
     results = []
     found = threading.Event()
