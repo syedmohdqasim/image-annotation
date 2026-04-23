@@ -20,26 +20,31 @@ graph TD
     Upload -->|3. image.submitted| Bus
     
     Bus -->|4. image.submitted| Proc[Image Processing]
+    Bus -->|4. image.submitted| DocSvc[Document DB Service]
     
     Proc -->|5. image.described| Bus
     Proc -->|6. objects.detected| Bus
     
-    Bus -->|7. image.described| DocSvc[Document DB Service]
+    Bus -->|7. image.described| Embed[Embedding Service]
+    Bus -->|7. image.described| DocSvc
     Bus -->|8. objects.detected| DocSvc
     
-    DocSvc -->|9. metadata.persisted| Bus
-    Bus -->|10. metadata.persisted| Embed[Embedding Service]
+    Embed -->|9. vectors.created| Bus
+    Bus -->|10. vectors.created| VecSvc[Vector DB Service]
+    Bus -->|10. vectors.created| DocSvc
     
-    Embed -->|11. vectors.created| Bus
-    Bus -->|12. vectors.created| VecSvc[Vector DB Service]
-    
-    VecSvc -->|13. indexing.completed| Bus
+    VecSvc -->|11. indexing.completed| Bus
+    DocSvc -->|12. metadata.persisted| Bus
 
     subgraph "Query Path"
         CLI -->|A. query.submitted| Bus
-        Bus -->|B. query.submitted| VecSvc
-        VecSvc -->|C. query.completed| Bus
-        Bus -->|D. query.completed| CLI
+        Bus -->|B. query.submitted| Embed
+        Embed -->|C. query.embedded| Bus
+        Bus -->|D. query.embedded| VecSvc
+        VecSvc -->|E. similarity.matched| Bus
+        Bus -->|F. similarity.matched| DocSvc
+        DocSvc -->|G. query.completed| Bus
+        Bus -->|H. query.completed| CLI
     end
 
     subgraph "Data Ownership"
@@ -56,9 +61,9 @@ graph TD
 | **CLI** | **Python Typer** | Entry point for requesting uploads and searching. |
 | **Upload** | **Python** | Listens for requests, saves images to `image_store`. |
 | **Image Processing**| **Gemini 1.5 Flash** | Generates image descriptions and detects objects. |
-| **Document DB** | **JSON/File** | Stores metadata, detections, and AI descriptions. |
-| **Embedding** | **Deterministic Hashing**| Generates vectors for detected labels. |
-| **Vector DB** | **FAISS** | Maintains similarity index and handles lookups. |
+| **Document DB** | **JSON/File** | Stores metadata, detections, and resolves search results. |
+| **Embedding** | **Deterministic Hashing**| Generates vectors for descriptions and search queries. |
+| **Vector DB** | **FAISS** | Maintains similarity index and performs vector lookups. |
 | **Event Bus** | **Redis** | Orchestrates asynchronous communication. |
 
 ## 🚀 Getting Started
@@ -101,15 +106,20 @@ python services/cli/main.py search "dog"
 
 ## 📡 Event Lifecycle
 
+### Indexing Pipeline
 1.  **`upload.requested`**: CLI requests an image to be ingested.
-2.  **`image.submitted`**: Ingestion complete; raw image is saved to `image_store`.
-3.  **`image.described`**: Gemini has generated a text description of the image.
-4.  **`objects.detected`**: Image Processing complete; labels and coordinates found.
-5.  **`metadata.persisted`**: Document DB has updated the record with detections and description.
-6.  **`vectors.created`**: Embedding Service has generated numerical representations.
-7.  **`indexing.completed`**: Vector DB has updated its index; system is now searchable.
-8.  **`query.submitted`**: User has initiated a search.
-9.  **`query.completed`**: Search results are ready for the CLI.
+2.  **`image.submitted`**: Raw image is saved; Document DB creates initial record.
+3.  **`image.described`**: Gemini generates a semantic description.
+4.  **`objects.detected`**: Object labels and bounding boxes identified.
+5.  **`vectors.created`**: Embedding Service generates vectors from the description.
+6.  **`indexing.completed`**: Vector DB has indexed the new vector.
+7.  **`metadata.persisted`**: Document DB has finalized the record with description and metadata.
+
+### Search Pipeline
+1.  **`query.submitted`**: User initiates a text search via CLI.
+2.  **`query.embedded`**: Embedding Service generates a vector for the search query.
+3.  **`similarity.matched`**: Vector DB finds the most similar image IDs.
+4.  **`query.completed`**: Document DB resolves image IDs to full metadata and returns to CLI.
 
 ## 🛠 Directory Structure
 
@@ -119,9 +129,9 @@ python services/cli/main.py search "dog"
 │   ├── cli/               # Typer-based CLI
 │   ├── upload/            # Image ingestion (Async)
 │   ├── image_processing/  # Gemini & AI Inference
-│   ├── document_db/       # Metadata Persistence
-│   ├── embedding/         # Vector Generation
-│   └── vector_db/         # Indexing (FAISS)
+│   ├── document_db/       # Metadata Persistence & Query Resolution
+│   ├── embedding/         # Vector Generation (Description & Query)
+│   └── vector_db/         # Vector Similarity Search (FAISS)
 ├── common/                # Shared Redis & Pydantic logic
 ├── image_store/           # Persistent storage for raw images
 └── tests/                 # Integration & Unit tests

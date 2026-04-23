@@ -3,7 +3,13 @@ import faiss
 import numpy as np
 import os
 from common.bus import EventBus
-from common.schemas.events import EventType, IndexingCompletedEvent, IndexingCompletedPayload
+from common.schemas.events import (
+    EventType, 
+    IndexingCompletedEvent, 
+    IndexingCompletedPayload,
+    SimilarityMatchedEvent,
+    SimilarityMatchedPayload
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("VectorDBService")
@@ -14,7 +20,7 @@ class VectorDBService:
         self.index_path = index_path
         self.bus = bus or EventBus()
         self.index = self._load_index()
-        self.id_map = {} # obj_id -> internal_id
+        self.id_map = {} # internal_id -> image_id
 
     def _load_index(self):
         if os.path.exists(self.index_path):
@@ -25,18 +31,17 @@ class VectorDBService:
         faiss.write_index(self.index, self.index_path)
 
     def run(self):
-        """Starts the service, listening for vector creation and query events."""
+        """Starts the service, listening for vector creation and query embedding events."""
         logger.info("Vector DB Service starting...")
         handlers = {
             EventType.VECTORS_CREATED.value: self.handle_vectors_created,
-            EventType.QUERY_SUBMITTED.value: self.handle_query_submitted
+            EventType.QUERY_EMBEDDED.value: self.handle_query_embedded
         }
         self.bus.listen_all(handlers)
 
     def handle_vectors_created(self, data: dict):
-        """Indexes vectors for detected objects."""
+        """Indexes vectors for images or objects."""
         image_id = data["payload"]["image_id"]
-        object_labels = data["payload"]["object_ids"]
         vectors_list = data["payload"].get("vectors", [])
         
         if not vectors_list:
@@ -44,18 +49,15 @@ class VectorDBService:
             return
 
         logger.info(f"Indexing {len(vectors_list)} vectors for image: {image_id}")
-
         vectors = np.array(vectors_list).astype('float32')
         
-        # Store metadata for each vector added
         start_id = self.index.ntotal
-        for i, label in enumerate(object_labels):
-            self.id_map[str(start_id + i)] = {"image_id": image_id, "label": label}
+        for i in range(len(vectors_list)):
+            self.id_map[str(start_id + i)] = image_id
         
         self.index.add(vectors)
         self._save_index()
 
-        # Create and publish indexing.completed event
         event = IndexingCompletedEvent(
             payload=IndexingCompletedPayload(
                 image_id=image_id,
@@ -63,49 +65,38 @@ class VectorDBService:
             )
         )
         self.bus.publish(event)
-        logger.info(f"Published indexing completed for {image_id}")
+        logger.info(f"Published indexing.completed for {image_id}")
 
-    def handle_query_submitted(self, data: dict):
-        """Performs a similarity search."""
+    def handle_query_embedded(self, data: dict):
+        """Performs a similarity search using a pre-generated vector."""
         query_id = data["payload"]["query_id"]
-        query_text = data["payload"]["payload"]
+        query_vector = np.array([data["payload"]["vector"]]).astype('float32')
         
-        logger.info(f"Searching for: {query_text}")
-
-        # In this mock, we convert the query text to a vector using the SAME logic
-        import hashlib
-        hash_digest = hashlib.sha256(query_text.encode()).digest()
-        full_hash = (hash_digest * 4)[:128]
-        query_vector = np.array([[float(b) / 255.0 for b in full_hash]]).astype('float32')
+        logger.info(f"Performing similarity search for query: {query_id}")
 
         # FAISS search
         D, I = self.index.search(query_vector, k=5)
         
-        results = []
+        matches = []
         for i, idx in enumerate(I[0]):
             if idx == -1: continue
-            meta = self.id_map.get(str(idx))
-            if meta:
-                # Score is L2 distance, so smaller is better. Convert to "confidence"
+            image_id = self.id_map.get(str(idx))
+            if image_id:
+                # Score is L2 distance, smaller is better.
                 score = max(0, 1.0 - (float(D[0][i]) / 10.0))
-                results.append({
-                    "image_id": meta["image_id"],
-                    "label": meta["label"],
+                matches.append({
+                    "image_id": image_id,
                     "score": score
                 })
 
-        # We don't publish QUERY_COMPLETED directly here if we want the Query Service to orchestrate,
-        # but for simplicity in this "make it work" phase, we can either publish it or 
-        # let Query Service handle the final response. 
-        # Let's publish a temporary "similarity.results" or just use QUERY_COMPLETED for now.
-        from common.schemas.events import QueryCompletedEvent, QueryCompletedPayload
-        event = QueryCompletedEvent(
-            payload=QueryCompletedPayload(
+        event = SimilarityMatchedEvent(
+            payload=SimilarityMatchedPayload(
                 query_id=query_id,
-                results=results
+                matches=matches
             )
         )
         self.bus.publish(event)
+        logger.info(f"Published similarity.matched for {query_id}")
 
 if __name__ == "__main__":
     svc = VectorDBService()

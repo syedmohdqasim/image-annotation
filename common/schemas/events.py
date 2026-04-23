@@ -13,6 +13,8 @@ class EventType(str, Enum):
     INDEXING_COMPLETED = "indexing.completed"
     IMAGE_DESCRIBED = "image.described"
     QUERY_SUBMITTED = "query.submitted"
+    QUERY_EMBEDDED = "query.embedded"
+    SIMILARITY_MATCHED = "similarity.matched"
     QUERY_COMPLETED = "query.completed"
 
 class BaseEvent(BaseModel):
@@ -33,7 +35,7 @@ class ImageSubmittedPayload(BaseModel):
 
 class ObjectsDetectedPayload(BaseModel):
     image_id: str
-    detections: List[Dict[str, Any]]  # List of {label: str, bbox: List[float], confidence: float}
+    detections: List[Dict[str, Any]]
 
 class ImageDescribedPayload(BaseModel):
     image_id: str
@@ -48,6 +50,8 @@ class VectorsCreatedPayload(BaseModel):
     image_id: str
     object_ids: List[str]
     embeddings_count: int
+    vectors: List[List[float]] = []
+    description: Optional[str] = None
 
 class IndexingCompletedPayload(BaseModel):
     image_id: str
@@ -57,6 +61,14 @@ class QuerySubmittedPayload(BaseModel):
     query_id: str
     query_type: str  # "text" or "image"
     payload: Any      # Text string or image_id
+
+class QueryEmbeddedPayload(BaseModel):
+    query_id: str
+    vector: List[float]
+
+class SimilarityMatchedPayload(BaseModel):
+    query_id: str
+    matches: List[Dict[str, Any]] # List of {image_id, score}
 
 class QueryCompletedPayload(BaseModel):
     query_id: str
@@ -91,6 +103,14 @@ class IndexingCompletedEvent(BaseEvent):
 class QuerySubmittedEvent(BaseEvent):
     type: EventType = EventType.QUERY_SUBMITTED
     payload: QuerySubmittedPayload
+
+class QueryEmbeddedEvent(BaseEvent):
+    type: EventType = EventType.QUERY_EMBEDDED
+    payload: QueryEmbeddedPayload
+
+class SimilarityMatchedEvent(BaseEvent):
+    type: EventType = EventType.SIMILARITY_MATCHED
+    payload: SimilarityMatchedPayload
 
 class QueryCompletedEvent(BaseEvent):
     type: EventType = EventType.QUERY_COMPLETED

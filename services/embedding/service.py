@@ -1,8 +1,13 @@
 import logging
-import random
 import json
 from common.bus import EventBus
-from common.schemas.events import EventType, VectorsCreatedEvent, VectorsCreatedPayload
+from common.schemas.events import (
+    EventType, 
+    VectorsCreatedEvent, 
+    VectorsCreatedPayload,
+    QueryEmbeddedEvent,
+    QueryEmbeddedPayload
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("EmbeddingService")
@@ -12,58 +17,59 @@ class EmbeddingService:
         self.bus = bus or EventBus()
 
     def run(self):
-        """Starts the service, listening for metadata persisted events."""
+        """Starts the service, listening for image descriptions and query submissions."""
         logger.info("Embedding Service starting...")
         handlers = {
-            EventType.METADATA_PERSISTED.value: self.handle_metadata_persisted
+            EventType.IMAGE_DESCRIBED.value: self.handle_image_described,
+            EventType.QUERY_SUBMITTED.value: self.handle_query_submitted
         }
         self.bus.listen_all(handlers)
 
-    def _generate_vector(self, label: str) -> list[float]:
-        """Generates a deterministic vector for a given label."""
+    def _generate_vector(self, text: str) -> list[float]:
+        """Generates a deterministic vector for a given text string."""
         import hashlib
-        # Create a 128-dim vector from the hash of the label
-        hash_digest = hashlib.sha256(label.encode()).digest()
+        # Create a 128-dim vector from the hash of the text
+        hash_digest = hashlib.sha256(text.encode()).digest()
         # Repeat/expand to 128 dimensions (128 bytes)
         full_hash = (hash_digest * 4)[:128]
         return [float(b) / 255.0 for b in full_hash]
 
-    def handle_metadata_persisted(self, data: dict):
-        """Generates vectors for detected objects."""
+    def handle_image_described(self, data: dict):
+        """Generates vectors for the image description and triggers storage/indexing."""
         image_id = data["payload"]["image_id"]
-        metadata = data["payload"]["metadata"]
-        detections = metadata.get("detections", [])
+        description = data["payload"]["description"]
         
-        logger.info(f"Generating embeddings for image: {image_id} ({len(detections)} objects)")
-
-        # In a real scenario, we'd use CLIP/Transformers to generate embeddings
-        # Here we use our deterministic hashing
-        vectors = []
-        object_labels = []
-        for det in detections:
-            label = det["label"]
-            vectors.append(self._generate_vector(label))
-            object_labels.append(label)
+        logger.info(f"Generating embedding for image description: {image_id}")
+        vector = self._generate_vector(description)
         
-        # We'll store these vectors in a local temporary store or pass them in the payload
-        # For this mock, we will pass them in the payload for simplicity, 
-        # though in production we'd use a shared storage or a side-channel.
-        
-        # Create and publish vectors.created event
         event = VectorsCreatedEvent(
             payload=VectorsCreatedPayload(
                 image_id=image_id,
-                object_ids=object_labels, # Using labels as IDs for simplicity in this mock
-                embeddings_count=len(vectors)
+                object_ids=["description"], 
+                embeddings_count=1,
+                vectors=[vector],
+                description=description
             )
         )
-        # Add the actual vectors to the payload (extra field not in schema, but Pydantic allows it if configured, 
-        # or we just hack it into the dict for this demo)
-        event_dict = event.model_dump()
-        event_dict["payload"]["vectors"] = vectors
+        self.bus.publish(event)
+        logger.info(f"Published vectors.created for description of {image_id}")
+
+    def handle_query_submitted(self, data: dict):
+        """Generates a vector for the search query."""
+        query_id = data["payload"]["query_id"]
+        query_text = data["payload"]["payload"]
         
-        self.bus.client.publish(EventType.VECTORS_CREATED.value, json.dumps(event_dict, default=str))
-        logger.info(f"Published vectors created for {image_id}")
+        logger.info(f"Generating embedding for query [{query_id}]: {query_text}")
+        vector = self._generate_vector(query_text)
+        
+        event = QueryEmbeddedEvent(
+            payload=QueryEmbeddedPayload(
+                query_id=query_id,
+                vector=vector
+            )
+        )
+        self.bus.publish(event)
+        logger.info(f"Published query.embedded for {query_id}")
 
 if __name__ == "__main__":
     svc = EmbeddingService()

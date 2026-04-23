@@ -1,6 +1,5 @@
-import os
-import json
 import pytest
+import os
 from unittest.mock import MagicMock
 from services.document_db.service import DocumentDBService
 from common.bus import EventBus
@@ -11,68 +10,52 @@ def mock_bus():
     return MagicMock(spec=EventBus)
 
 @pytest.fixture
-def temp_db(tmp_path):
-    db_file = tmp_path / "test_db.json"
-    return str(db_file)
+def test_db_path():
+    path = "tests/test_doc_db.json"
+    if os.path.exists(path): os.remove(path)
+    yield path
+    if os.path.exists(path): os.remove(path)
 
-def test_handle_objects_detected_persists_metadata(temp_db, mock_bus):
-    # Setup
-    svc = DocumentDBService(db_path=temp_db, bus=mock_bus)
+def test_handle_vectors_created_updates_description(mock_bus, test_db_path):
+    svc = DocumentDBService(db_path=test_db_path, bus=mock_bus)
+    # Pre-seed with image
+    svc.handle_image_submitted({
+        "timestamp": "now",
+        "payload": {"image_id": "img_1", "path": "test.jpg"}
+    })
+    
     test_payload = {
-        "event_id": "evt_test_123",
-        "timestamp": "2026-04-09T18:00:00Z",
-        "type": "objects.detected",
         "payload": {
-            "image_id": "img_test_123",
-            "detections": [{"label": "cat", "confidence": 0.99}]
+            "image_id": "img_1",
+            "description": "A test description"
         }
     }
     
-    # Act
-    svc.handle_objects_detected(test_payload)
+    svc.handle_vectors_created(test_payload)
     
-    # Assert - Check DB file
-    assert os.path.exists(temp_db)
-    with open(temp_db, "r") as f:
-        db_data = json.load(f)
-        assert "img_test_123" in db_data
-        assert db_data["img_test_123"]["detections"][0]["label"] == "cat"
-
-def test_handle_objects_detected_publishes_event(temp_db, mock_bus):
-    # Setup
-    svc = DocumentDBService(db_path=temp_db, bus=mock_bus)
-    test_payload = {
-        "event_id": "evt_test_123",
-        "timestamp": "2026-04-09T18:00:00Z",
-        "type": "objects.detected",
-        "payload": {
-            "image_id": "img_test_123",
-            "detections": [{"label": "cat"}]
-        }
-    }
-    
-    # Act
-    svc.handle_objects_detected(test_payload)
-    
-    # Assert - Check Bus
+    assert svc.db["img_1"]["description"] == "A test description"
     mock_bus.publish.assert_called_once()
-    published_event = mock_bus.publish.call_args[0][0]
-    
-    assert published_event.type == EventType.METADATA_PERSISTED
-    assert published_event.payload.image_id == "img_test_123"
-    assert "cat" in published_event.payload.metadata["detections"][0]["label"]
+    assert mock_bus.publish.call_args[0][0].type == EventType.METADATA_PERSISTED
 
-def test_db_loading(temp_db, mock_bus):
-    # Setup - Pre-fill DB
-    initial_data = {"img_old": {"image_id": "img_old", "detections": []}}
-    with open(temp_db, "w") as f:
-        json.dump(initial_data, f)
+def test_handle_similarity_matched_publishes_query_completed(mock_bus, test_db_path):
+    svc = DocumentDBService(db_path=test_db_path, bus=mock_bus)
+    # Seed with image data
+    svc.db["img_1"] = {"image_id": "img_1", "description": "desc", "path": "path.jpg"}
     
-    svc = DocumentDBService(db_path=temp_db, bus=mock_bus)
+    test_payload = {
+        "payload": {
+            "query_id": "q_1",
+            "matches": [{"image_id": "img_1", "score": 0.9}]
+        }
+    }
     
-    # Assert
-    assert "img_old" in svc.db
-    assert svc.db["img_old"]["image_id"] == "img_old"
+    svc.handle_similarity_matched(test_payload)
+    
+    mock_bus.publish.assert_called_once()
+    event = mock_bus.publish.call_args[0][0]
+    assert event.type == EventType.QUERY_COMPLETED
+    assert len(event.payload.results) == 1
+    assert event.payload.results[0]["image_id"] == "img_1"
 
 if __name__ == "__main__":
     pytest.main([__file__])

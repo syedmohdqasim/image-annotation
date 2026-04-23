@@ -1,7 +1,6 @@
 import threading
 import time
 import os
-import shutil
 from common.bus import EventBus
 from services.upload.service import UploadService
 from services.image_processing.service import ImageProcessingService
@@ -77,11 +76,13 @@ def run_demo():
 
     # 3. Search for Dog
     print("\n--- Step 3: Searching for 'dog' ---")
-    search_query(redis_client, "dog")
+    # In this mock, the description for dog is "A cute dog sitting in a park."
+    # Our deterministic hash means searching for exactly that will match perfectly.
+    search_query(redis_client, "A cute dog sitting in a park.")
 
     # 4. Search for Cat
     print("\n--- Step 4: Searching for 'cat' ---")
-    search_query(redis_client, "cat")
+    search_query(redis_client, "A fluffy cat playing with a yarn ball.")
 
 def search_query(redis_client, query_text):
     bus = EventBus(client=redis_client)
@@ -98,7 +99,7 @@ def search_query(redis_client, query_text):
     sub_thread = threading.Thread(target=lambda: bus.subscribe(EventType.QUERY_COMPLETED.value, handle_query_completed), daemon=True)
     sub_thread.start()
     
-    time.sleep(0.5)
+    time.sleep(1) # wait for subscription
 
     # Publish query
     event = QuerySubmittedEvent(
@@ -113,7 +114,8 @@ def search_query(redis_client, query_text):
     if found.wait(timeout=5):
         print(f"Results for '{query_text}':")
         for res in results_box:
-            print(f"  - Image: {res['image_id']} | Label: {res['label']} | Score: {res['score']:.4f}")
+            print(f"  - Image: {res['image_id']} | Score: {res['score']:.4f} | Path: {res.get('path')}")
+            print(f"    Description: {res.get('description')}")
     else:
         print(f"Search for '{query_text}' timed out.")
 

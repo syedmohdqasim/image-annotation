@@ -18,26 +18,33 @@ This project is a modular, event-driven system for processing images, detecting 
     - `bus.py`: Implementation of the `EventBus`.
     - `schemas/events.py`: Pydantic models for all system events.
 - `services/`: Individual microservices.
-    - `cli/`: User entry point; now uses events for uploads.
-    - `upload/`: Listens for `upload.requested` and saves to `image_store/`.
-    - `image_processing/`: Generates image descriptions (Gemini) and detects objects.
-    - `document_db/`: Persists metadata, detections, and AI descriptions.
-    - `embedding/`: Generates vectors for labels.
-    - `vector_db/`: Maintains FAISS index.
+    - `cli/`: User entry point for uploads and semantic search.
+    - `upload/`: Handles `upload.requested` and persists raw images.
+    - `image_processing/`: Generates `image.described` and `objects.detected` events.
+    - `document_db/`: Finalizes records on `vectors.created` and resolves search results on `similarity.matched`.
+    - `embedding/`: Generates embeddings for both image descriptions and search queries.
+    - `vector_db/`: Manages FAISS index and performs similarity search.
 
 ## 📡 Updated Event Lifecycle
 
-1.  **`upload.requested`**: Initiated by CLI.
-2.  **`image.submitted`**: Raw image saved; path and metadata available.
-3.  **`image.described`**: Gemini-generated description added.
+### Indexing Pipeline
+1.  **`upload.requested`**: Triggered by CLI.
+2.  **`image.submitted`**: Image saved to `image_store/`.
+3.  **`image.described`**: Semantic description generated via Gemini.
 4.  **`objects.detected`**: Object labels and bounding boxes found.
-5.  **`metadata.persisted`**: Record updated in Document DB.
-6.  **`vectors.created`**: Embedding vectors generated.
-7.  **`indexing.completed`**: Vector index updated.
+5.  **`vectors.created`**: Embedding generated from description (published by Embedding Service).
+6.  **`indexing.completed`**: Vector indexed in FAISS.
+7.  **`metadata.persisted`**: Record finalized in Document DB with full metadata.
+
+### Search Pipeline
+1.  **`query.submitted`**: User search request.
+2.  **`query.embedded`**: Embedding Service generates search vector.
+3.  **`similarity.matched`**: Vector DB finds closest image IDs.
+4.  **`query.completed`**: Document DB attaches metadata and returns results.
 
 ## 📜 Development Conventions
 
-1.  **Asynchronous First:** Do not call service methods directly. Use the `EventBus` to trigger actions (e.g., use `upload.requested` instead of `UploadService().upload()`).
-2.  **Gemini Integration:** Use the `GOOGLE_API_KEY` environment variable for real AI features; otherwise, the system will use mocked descriptions.
-3.  **Local Storage:** Images are stored in `image_store/` with unique IDs.
-4.  **Mocking:** Use `FakeRedis` for testing to ensure hermeticity.
+1.  **Asynchronous First:** Communication is exclusively via the `EventBus`.
+2.  **Decoupled Search:** The search flow is split between Embedding (math), Vector DB (similarity), and Document DB (context).
+3.  **Gemini Integration:** Use `GOOGLE_API_KEY` for AI features; otherwise, mocked descriptions are used.
+4.  **Mocking:** Use `FakeRedis` for unit and integration tests.
