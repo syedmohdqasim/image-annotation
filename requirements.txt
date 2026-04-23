@@ -5,3 +5,5 @@ typer
 faiss-cpu
 numpy
 pytest
+google-generativeai
+pillow

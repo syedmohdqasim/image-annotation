@@ -5,28 +5,29 @@ import uuid
 import typer
 from services.upload.service import UploadService
 from common.bus import EventBus
-from common.schemas.events import QuerySubmittedEvent, QuerySubmittedPayload, EventType
+from common.schemas.events import QuerySubmittedEvent, QuerySubmittedPayload, EventType, UploadRequestedEvent, UploadRequestedPayload
 
 app = typer.Typer()
 
 @app.command()
 def upload(file_path: str):
     """
-    Upload an image to the system.
+    Request an image upload via the event bus.
     """
     if not os.path.exists(file_path):
         typer.echo(f"Error: File {file_path} not found.")
         raise typer.Exit(code=1)
 
-    typer.echo(f"Uploading {file_path}...")
+    typer.echo(f"Requesting upload for {file_path}...")
     
     bus = EventBus()
-    svc = UploadService(bus=bus)
-    
-    image_id, target_path = svc.upload_image(file_path)
-    
-    typer.echo(f"Successfully uploaded! Image ID: {image_id}")
-    typer.echo(f"Internal storage path: {target_path}")
+    event = UploadRequestedEvent(
+        payload=UploadRequestedPayload(
+            source_path=os.path.abspath(file_path)
+        )
+    )
+    bus.publish(event)
+    typer.echo("Upload request sent to the bus.")
 
 @app.command()
 def search(query: str, query_type: str = "text"):

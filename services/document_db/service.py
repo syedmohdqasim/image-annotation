@@ -24,26 +24,53 @@ class DocumentDBService:
             json.dump(self.db, f, indent=2)
 
     def run(self):
-        """Starts the service, listening for detection events."""
+        """Starts the service, listening for upload, detection, and description events."""
         logger.info("Document DB Service starting...")
         handlers = {
-            EventType.OBJECTS_DETECTED.value: self.handle_objects_detected
+            EventType.IMAGE_SUBMITTED.value: self.handle_image_submitted,
+            EventType.OBJECTS_DETECTED.value: self.handle_objects_detected,
+            EventType.IMAGE_DESCRIBED.value: self.handle_image_described
         }
         self.bus.listen_all(handlers)
 
+    def handle_image_described(self, data: dict):
+        """Updates record with image description."""
+        image_id = data["payload"]["image_id"]
+        description = data["payload"]["description"]
+        
+        if image_id not in self.db:
+            logger.warning(f"Received description for unknown image {image_id}. Creating new record.")
+            self.db[image_id] = {"image_id": image_id}
+
+        logger.info(f"Updating description for image: {image_id}")
+        self.db[image_id]["description"] = description
+        self._save_db()
+
+    def handle_image_submitted(self, data: dict):
+        """Creates initial record with image path."""
+        image_id = data["payload"]["image_id"]
+        path = data["payload"]["path"]
+        
+        logger.info(f"Recording initial upload for image: {image_id}")
+        self.db[image_id] = {
+            "image_id": image_id,
+            "path": path,
+            "detections": [],
+            "timestamp": data["timestamp"]
+        }
+        self._save_db()
+
     def handle_objects_detected(self, data: dict):
-        """Stores detected objects in the document database."""
+        """Updates record with detected objects."""
         image_id = data["payload"]["image_id"]
         detections = data["payload"]["detections"]
         
-        logger.info(f"Storing metadata for image: {image_id}")
+        if image_id not in self.db:
+            logger.warning(f"Received detections for unknown image {image_id}. Creating new record.")
+            self.db[image_id] = {"image_id": image_id}
 
-        # Store in DB
-        self.db[image_id] = {
-            "image_id": image_id,
-            "detections": detections,
-            "timestamp": data["timestamp"]
-        }
+        logger.info(f"Updating metadata for image: {image_id}")
+        self.db[image_id]["detections"] = detections
         self._save_db()
 
         # Create and publish metadata.persisted event

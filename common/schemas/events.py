@@ -5,11 +5,13 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 class EventType(str, Enum):
+    UPLOAD_REQUESTED = "upload.requested"
     IMAGE_SUBMITTED = "image.submitted"
     OBJECTS_DETECTED = "objects.detected"
     METADATA_PERSISTED = "metadata.persisted"
     VECTORS_CREATED = "vectors.created"
     INDEXING_COMPLETED = "indexing.completed"
+    IMAGE_DESCRIBED = "image.described"
     QUERY_SUBMITTED = "query.submitted"
     QUERY_COMPLETED = "query.completed"
 
@@ -20,14 +22,22 @@ class BaseEvent(BaseModel):
 
 # --- Payloads ---
 
+class UploadRequestedPayload(BaseModel):
+    source_path: str
+
 class ImageSubmittedPayload(BaseModel):
     image_id: str
     path: str
+    original_name: Optional[str] = None
     source: str = "cli"
 
 class ObjectsDetectedPayload(BaseModel):
     image_id: str
     detections: List[Dict[str, Any]]  # List of {label: str, bbox: List[float], confidence: float}
+
+class ImageDescribedPayload(BaseModel):
+    image_id: str
+    description: str
 
 class MetadataPersistedPayload(BaseModel):
     image_id: str
@@ -62,6 +72,10 @@ class ObjectsDetectedEvent(BaseEvent):
     type: EventType = EventType.OBJECTS_DETECTED
     payload: ObjectsDetectedPayload
 
+class ImageDescribedEvent(BaseEvent):
+    type: EventType = EventType.IMAGE_DESCRIBED
+    payload: ImageDescribedPayload
+
 class MetadataPersistedEvent(BaseEvent):
     type: EventType = EventType.METADATA_PERSISTED
     payload: MetadataPersistedPayload
@@ -81,3 +95,7 @@ class QuerySubmittedEvent(BaseEvent):
 class QueryCompletedEvent(BaseEvent):
     type: EventType = EventType.QUERY_COMPLETED
     payload: QueryCompletedPayload
+
+class UploadRequestedEvent(BaseEvent):
+    type: EventType = EventType.UPLOAD_REQUESTED
+    payload: UploadRequestedPayload
