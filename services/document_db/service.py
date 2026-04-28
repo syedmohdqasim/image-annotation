@@ -132,6 +132,7 @@ class DocumentDBService:
         results = []
         for match in matches:
             image_id = match["image_id"]
+            matched_label = match.get("matched_label", "unknown")
             record = None
             if self.use_mongodb:
                 record = self.collection.find_one({"_id": image_id})
@@ -142,6 +143,7 @@ class DocumentDBService:
                 results.append({
                     "image_id": image_id,
                     "score": match["score"],
+                    "matched_as": matched_label,
                     "description": record.get("description"),
                     "path": record.get("path")
                 })

@@ -63,11 +63,17 @@ def search(query: str, query_type: str = "text"):
     bus.publish(event)
     
     # Wait for results
-    typer.echo("Waiting for results...")
-    if found.wait(timeout=10):
+    typer.echo("Waiting for results (timeout: 30s)...")
+    if found.wait(timeout=30):
         typer.echo(f"\n--- Search Results for '{query}' ---")
         for res in results:
-            typer.echo(f"Image ID: {res['image_id']} | Label: {res['label']} | Confidence: {res['score']:.2f}")
+            desc = res.get('description', 'No description')
+            path = res.get('path', 'Unknown path')
+            matched_as = res.get('matched_as', 'description')
+            typer.echo(f"Image ID: {res['image_id']} | Score: {res['score']:.2f} | Matched: {matched_as}")
+            typer.echo(f"  Description: {desc}")
+            typer.echo(f"  Path: {path}")
+            typer.echo("-" * 40)
     else:
         typer.echo("Search timed out.")
 

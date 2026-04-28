@@ -40,6 +40,7 @@ class ObjectsDetectedPayload(BaseModel):
 class ImageDescribedPayload(BaseModel):
     image_id: str
     description: str
+    detections: List[Dict[str, Any]] = []
 
 class MetadataPersistedPayload(BaseModel):
     image_id: str

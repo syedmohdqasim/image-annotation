@@ -91,28 +91,22 @@ export GOOGLE_API_KEY="your_key_here"
 ```
 
 ### 3. Running the System
-Start the services in separate terminal windows:
+You can start all backend services simultaneously using the provided orchestration script:
 ```bash
-# Terminal 1
-python services/upload/service.py
+# Start all services
+./run_system.sh
 
-# Terminal 2
-python services/image_processing/service.py
+# View live logs
+tail -f system.log
 
-# Terminal 3
-python services/document_db/service.py
-
-# Terminal 4
-python services/embedding/service.py
-
-# Terminal 5
-python services/vector_db/service.py
+# Stop all services when finished
+./stop_services.sh
 ```
 
-Then use the CLI:
+Once the services are running, you can use the CLI to interact with the system:
 ```bash
-python services/cli/main.py upload sample_data/dog.jpg
-python services/cli/main.py search "dog"
+python3 services/cli/main.py upload sample_data/dog.jpg
+python3 services/cli/main.py search "a dog in a park"
 ```
 
 ## 📡 Event Lifecycle
