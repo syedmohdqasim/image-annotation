@@ -64,9 +64,20 @@ graph TD
 | **Document DB** | **JSON/File** | Stores metadata, detections, and resolves search results. |
 | **Embedding** | **Deterministic Hashing**| Generates vectors for descriptions and search queries. |
 | **Vector DB** | **FAISS** | Maintains similarity index and performs vector lookups. |
-| **Event Bus** | **Redis** | Orchestrates asynchronous communication. |
+| Event Bus | **Redis** | Orchestrates asynchronous communication. |
+
+## 🧠 Vector Search with FAISS
+
+The system leverages **FAISS (Facebook AI Similarity Search)** to enable high-performance semantic retrieval.
+
+### How FAISS is used:
+- **Index Type**: The system uses `IndexFlatL2`, which performs an exhaustive brute-force search using Euclidean distance (L2). This ensures 100% accuracy (recall) for the similarity math in our current scale.
+- **Dimensionality**: Vectors are currently normalized to **128 dimensions**, generated via deterministic hashing (mock) or CLIP-style models (production).
+- **ID Mapping**: Since FAISS indexes use integer offsets, the **Vector DB Service** maintains an internal mapping between FAISS internal IDs and the system's UUID-based `image_id`.
+- **Persistence**: The index is serialized to disk as a `.index` file, allowing the vector space to be reloaded across service restarts.
 
 ## 🚀 Getting Started
+
 
 ### 1. Prerequisites
 - **Python 3.10+**

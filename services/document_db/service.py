@@ -9,25 +9,48 @@ from common.schemas.events import (
     QueryCompletedEvent,
     QueryCompletedPayload
 )
+try:
+    from pymongo import MongoClient
+    from pymongo.errors import ConnectionFailure
+except ImportError:
+    MongoClient = None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("DocumentDBService")
 
 class DocumentDBService:
     def __init__(self, db_path: str = "services/document_db/data.json", bus: EventBus = None):
-        self.db_path = db_path
         self.bus = bus or EventBus()
-        self.db = self._load_db()
+        self.mongodb_uri = os.getenv("MONGODB_URI")
+        self.use_mongodb = False
+        
+        if self.mongodb_uri and MongoClient:
+            try:
+                self.client = MongoClient(self.mongodb_uri)
+                # Test connection
+                self.client.admin.command('ping')
+                self.db_conn = self.client.get_database("image_system")
+                self.collection = self.db_conn.get_collection("images")
+                self.use_mongodb = True
+                logger.info("Connected to MongoDB Atlas successfully.")
+            except Exception as e:
+                logger.error(f"Failed to connect to MongoDB: {e}. Falling back to JSON.")
+        
+        if not self.use_mongodb:
+            self.db_path = db_path
+            self.db = self._load_json_db()
+            logger.info(f"Using local JSON database at: {self.db_path}")
 
-    def _load_db(self):
+    def _load_json_db(self):
         if os.path.exists(self.db_path):
             with open(self.db_path, "r") as f:
                 return json.load(f)
         return {}
 
-    def _save_db(self):
-        with open(self.db_path, "w") as f:
-            json.dump(self.db, f, indent=2)
+    def _save_json_db(self):
+        if not self.use_mongodb:
+            with open(self.db_path, "w") as f:
+                json.dump(self.db, f, indent=2)
 
     def run(self):
         """Starts the service, listening for events to persist metadata and resolve queries."""
@@ -44,52 +67,57 @@ class DocumentDBService:
         """Creates initial record with image path."""
         image_id = data["payload"]["image_id"]
         path = data["payload"]["path"]
-        
-        logger.info(f"Recording initial upload for image: {image_id}")
-        self.db[image_id] = {
+        record = {
             "image_id": image_id,
             "path": path,
             "detections": [],
             "description": None,
             "timestamp": data["timestamp"]
         }
-        self._save_db()
+        
+        logger.info(f"Recording initial upload for image: {image_id}")
+        if self.use_mongodb:
+            self.collection.update_one({"_id": image_id}, {"$set": record}, upsert=True)
+        else:
+            self.db[image_id] = record
+            self._save_json_db()
 
     def handle_objects_detected(self, data: dict):
         """Updates record with detected objects."""
         image_id = data["payload"]["image_id"]
         detections = data["payload"]["detections"]
         
-        if image_id not in self.db:
-            logger.warning(f"Received detections for unknown image {image_id}.")
-            return
-
         logger.info(f"Updating object detections for image: {image_id}")
-        self.db[image_id]["detections"] = detections
-        self._save_db()
+        if self.use_mongodb:
+            self.collection.update_one({"_id": image_id}, {"$set": {"detections": detections}}, upsert=True)
+        else:
+            if image_id not in self.db: self.db[image_id] = {"image_id": image_id}
+            self.db[image_id]["detections"] = detections
+            self._save_json_db()
 
     def handle_vectors_created(self, data: dict):
         """Updates record with semantic description when vectors are ready."""
         image_id = data["payload"]["image_id"]
         description = data["payload"].get("description")
         
-        if not description:
-            return
-
-        if image_id not in self.db:
-            logger.warning(f"Received vectors for unknown image {image_id}.")
-            return
+        if not description: return
 
         logger.info(f"Updating description from vector event for image: {image_id}")
-        self.db[image_id]["description"] = description
-        self._save_db()
+        if self.use_mongodb:
+            self.collection.update_one({"_id": image_id}, {"$set": {"description": description}}, upsert=True)
+            record = self.collection.find_one({"_id": image_id})
+        else:
+            if image_id not in self.db: self.db[image_id] = {"image_id": image_id}
+            self.db[image_id]["description"] = description
+            self._save_json_db()
+            record = self.db[image_id]
 
         # Publish metadata persisted event as the record is now fully enriched
         event = MetadataPersistedEvent(
             payload=MetadataPersistedPayload(
                 image_id=image_id,
                 document_id=image_id,
-                metadata=self.db[image_id]
+                metadata=record
             )
         )
         self.bus.publish(event)
@@ -104,8 +132,13 @@ class DocumentDBService:
         results = []
         for match in matches:
             image_id = match["image_id"]
-            if image_id in self.db:
-                record = self.db[image_id]
+            record = None
+            if self.use_mongodb:
+                record = self.collection.find_one({"_id": image_id})
+            else:
+                record = self.db.get(image_id)
+                
+            if record:
                 results.append({
                     "image_id": image_id,
                     "score": match["score"],
