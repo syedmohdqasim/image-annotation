@@ -57,7 +57,7 @@ def test_handle_query_submitted_publishes_query_embedded(mock_bus):
     
     assert published_event.type == EventType.QUERY_EMBEDDED
     assert published_event.payload.query_id == "q_123"
-    assert len(published_event.payload.vector) == 128
+    assert len(published_event.payload.vector) == 3072
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -3,6 +3,7 @@ import pytest
 from typer.testing import CliRunner
 from unittest.mock import MagicMock, patch
 from services.cli.main import app
+from common.schemas.events import EventType
 
 runner = CliRunner()
 
@@ -12,13 +13,10 @@ def test_upload_file_not_found():
     assert result.exit_code == 1
     assert "Error: File non_existent_file.jpg not found." in result.stdout
 
-@patch("services.cli.main.UploadService")
 @patch("services.cli.main.EventBus")
-def test_upload_success(mock_bus, mock_svc_class):
+def test_upload_success(mock_bus_class):
     """Test successful upload command."""
-    # Setup mock service
-    mock_svc = mock_svc_class.return_value
-    mock_svc.upload_image.return_value = ("img_test_123", "/path/to/img.jpg")
+    mock_bus = mock_bus_class.return_value
     
     # Create a dummy file
     test_file = "test_cli_upload.jpg"
@@ -29,11 +27,14 @@ def test_upload_success(mock_bus, mock_svc_class):
         result = runner.invoke(app, ["upload", test_file])
         
         assert result.exit_code == 0
-        assert "Successfully uploaded! Image ID: img_test_123" in result.stdout
-        assert "Internal storage path: /path/to/img.jpg" in result.stdout
+        assert "Requesting upload for test_cli_upload.jpg..." in result.stdout
+        assert "Upload request sent to the bus." in result.stdout
         
-        # Verify service was called
-        mock_svc.upload_image.assert_called_once_with(test_file)
+        # Verify event was published
+        mock_bus.publish.assert_called_once()
+        event = mock_bus.publish.call_args[0][0]
+        assert event.type == EventType.UPLOAD_REQUESTED
+        assert event.payload.source_path.endswith(test_file)
     finally:
         if os.path.exists(test_file):
             os.remove(test_file)
@@ -43,10 +44,6 @@ def test_search_timeout(mock_bus_class):
     """Test search command timing out."""
     # Mock the bus so it doesn't actually block or do anything
     mock_bus = mock_bus_class.return_value
-    
-    # Run search - it will timeout because we aren't sending a QueryCompletedEvent
-    # We reduce the timeout in the test by patching the wait? 
-    # For now, let's just mock the behavior.
     
     with patch("threading.Event.wait", return_value=False):
         result = runner.invoke(app, ["search", "dog"])
@@ -58,7 +55,6 @@ def test_search_success(mock_bus_class):
     mock_bus = mock_bus_class.return_value
     
     # To simulate success, we need to trigger the callback that search() passes to subscribe()
-    # We'll capture the handler when subscribe is called
     handler_to_call = None
     def mock_subscribe(topic, handler):
         nonlocal handler_to_call
@@ -69,42 +65,30 @@ def test_search_success(mock_bus_class):
 
     # We also need to mock the wait so it doesn't block
     with patch("threading.Event.wait") as mock_wait:
-        # Define what happens when wait is called
-        def simulate_response(*args, **kwargs):
-            if handler_to_call:
-                # Call the handler with mock results
-                handler_to_call({
-                    "payload": {
-                        "query_id": "any", # The CLI checks this, so we'll patch the UUID too
-                        "results": [{"image_id": "img_1", "label": "dog", "score": 0.99}]
-                    }
-                })
-            return True
-        
-        mock_wait.side_effect = simulate_response
-        
         # Patch uuid so the IDs match
         with patch("uuid.uuid4") as mock_uuid:
             # CLI uses query_id = f"q_{uuid.uuid4().hex[:6]}"
             mock_uuid.return_value.hex = "12345678"
             expected_query_id = "q_123456"
             
-            # Update simulate_call to use correct query_id
-            def simulate_response_fixed(*args, **kwargs):
+            # Define what happens when wait is called
+            def simulate_response(*args, **kwargs):
                 if handler_to_call:
                     handler_to_call({
                         "payload": {
                             "query_id": expected_query_id,
-                            "results": [{"image_id": "img_1", "label": "dog", "score": 0.99}]
+                            "results": [{"image_id": "img_1", "matched_as": "dog", "score": 0.99, "description": "A dog", "path": "dog.jpg"}]
                         }
                     })
                 return True
-            mock_wait.side_effect = simulate_response_fixed
+            
+            mock_wait.side_effect = simulate_response
 
             result = runner.invoke(app, ["search", "dog"])
             
             assert "Search Results for 'dog'" in result.stdout
-            assert "Image ID: img_1 | Label: dog | Confidence: 0.99" in result.stdout
+            assert "Image ID: img_1 | Score: 0.99 | Matched: dog" in result.stdout
+            assert "Description: A dog" in result.stdout
 
 if __name__ == "__main__":
     pytest.main([__file__])

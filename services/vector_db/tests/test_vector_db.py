@@ -21,7 +21,7 @@ def test_handle_vectors_created_indexes_and_publishes(mock_bus, test_index_path)
     test_payload = {
         "payload": {
             "image_id": "img_1",
-            "vectors": [[0.1] * 128]
+            "vectors": [[0.1] * 3072]
         }
     }
     
@@ -35,14 +35,14 @@ def test_handle_query_embedded_returns_matches(mock_bus, test_index_path):
     svc = VectorDBService(index_path=test_index_path, bus=mock_bus)
     # Index one vector first
     svc.handle_vectors_created({
-        "payload": {"image_id": "img_1", "vectors": [[0.1] * 128]}
+        "payload": {"image_id": "img_1", "vectors": [[0.1] * 3072]}
     })
     mock_bus.publish.reset_mock()
     
     query_payload = {
         "payload": {
             "query_id": "q_1",
-            "vector": [0.1] * 128
+            "vector": [0.1] * 3072
         }
     }
     

@@ -1,6 +1,6 @@
 import pytest
 import os
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from services.document_db.service import DocumentDBService
 from common.bus import EventBus
 from common.schemas.events import EventType
@@ -10,13 +10,18 @@ def mock_bus():
     return MagicMock(spec=EventBus)
 
 @pytest.fixture
+def no_mongodb():
+    with patch("os.getenv", return_value=None):
+        yield
+
+@pytest.fixture
 def test_db_path():
     path = "tests/test_doc_db.json"
     if os.path.exists(path): os.remove(path)
     yield path
     if os.path.exists(path): os.remove(path)
 
-def test_handle_vectors_created_updates_description(mock_bus, test_db_path):
+def test_handle_vectors_created_updates_description(mock_bus, test_db_path, no_mongodb):
     svc = DocumentDBService(db_path=test_db_path, bus=mock_bus)
     # Pre-seed with image
     svc.handle_image_submitted({
@@ -37,7 +42,7 @@ def test_handle_vectors_created_updates_description(mock_bus, test_db_path):
     mock_bus.publish.assert_called_once()
     assert mock_bus.publish.call_args[0][0].type == EventType.METADATA_PERSISTED
 
-def test_handle_similarity_matched_publishes_query_completed(mock_bus, test_db_path):
+def test_handle_similarity_matched_publishes_query_completed(mock_bus, test_db_path, no_mongodb):
     svc = DocumentDBService(db_path=test_db_path, bus=mock_bus)
     # Seed with image data
     svc.db["img_1"] = {"image_id": "img_1", "description": "desc", "path": "path.jpg"}

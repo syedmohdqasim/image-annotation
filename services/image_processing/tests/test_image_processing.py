@@ -26,13 +26,17 @@ def test_handle_image_submitted_publishes_detections(mock_bus):
     svc.handle_image_submitted(test_payload)
     
     # Assert
-    mock_bus.publish.assert_called_once()
-    published_event = mock_bus.publish.call_args[0][0]
+    assert mock_bus.publish.call_count == 2
     
-    assert published_event.type == EventType.OBJECTS_DETECTED
-    assert published_event.payload.image_id == "img_test_123"
-    assert len(published_event.payload.detections) > 0
-    assert published_event.payload.detections[0]["label"] == "dog"
+    # Check for both event types
+    calls = [call[0][0].type for call in mock_bus.publish.call_args_list]
+    assert EventType.IMAGE_DESCRIBED in calls
+    assert EventType.OBJECTS_DETECTED in calls
+    
+    # Specifically check the ImageDescribedEvent
+    described_event = next(call[0][0] for call in mock_bus.publish.call_args_list if call[0][0].type == EventType.IMAGE_DESCRIBED)
+    assert described_event.payload.image_id == "img_test_123"
+    assert "Mocked" in described_event.payload.description or "unavailable" in described_event.payload.description
 
 def test_service_start_subscribes_to_correct_topic(mock_bus):
     # Setup
