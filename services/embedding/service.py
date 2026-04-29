@@ -45,8 +45,8 @@ class EmbeddingService:
             # Fallback mock hashing
             import hashlib
             hash_digest = hashlib.sha256(text.encode()).digest()
-            # Expand to 768 dimensions
-            full_hash = (hash_digest * 24)[:768]
+            # Expand to 3072 dimensions
+            full_hash = (hash_digest * 96)[:3072]
             return [float(b) / 255.0 for b in full_hash]
 
         try:
@@ -61,7 +61,7 @@ class EmbeddingService:
             # Dynamic fallback to hash on error
             import hashlib
             hash_digest = hashlib.sha256(text.encode()).digest()
-            full_hash = (hash_digest * 24)[:768]
+            full_hash = (hash_digest * 96)[:3072]
             return [float(b) / 255.0 for b in full_hash]
 
     def handle_image_described(self, data: dict):
