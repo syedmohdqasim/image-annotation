@@ -2,11 +2,40 @@
 
 A modular, event-driven system for processing images, detecting objects, and enabling semantic search using vector embeddings and document metadata.
 
-## 🏗 Architecture & Technology Stack
+## 🏗 System Architecture
 
-The system is built on a **Pub-Sub** architecture using **Redis** as the central nervous system. Services are strictly decoupled and communicate exclusively through the event bus.
+### High-Level Workflow
+```mermaid
+graph TD
+    CLI((User/CLI)) <--> Bus{Redis Event Bus}
+    
+    Bus <--> Upload[Upload Service]
+    Bus <--> Proc[Image Processing]
+    Bus <--> Embed[Embedding Service]
+    Bus <--> VecDB[Vector DB]
+    Bus <--> DocDB[Document DB]
+    
+    subgraph "Storage & AI"
+        Proc --- Gemini((Gemini 1.5))
+        VecDB --- FAISS[(FAISS Index)]
+        DocDB --- JSON[(JSON DB)]
+    end
+```
 
-### System Diagram
+### 📺 System Demonstration
+
+[![Watch the Demo](https://i.ytimg.com/vi/Hdd5vcPGQpM/hqdefault.jpg)](https://www.youtube.com/watch?v=Hdd5vcPGQpM)
+
+> **[▶️ Click here to watch the system demonstration on YouTube](https://www.youtube.com/watch?v=Hdd5vcPGQpM)**
+
+---
+
+## 📡 Detailed Event Flow
+
+The system is built on a **Pub-Sub** architecture using **Redis**. Services are strictly decoupled and communicate exclusively through the event bus.
+
+<details>
+<summary><b>View Detailed System Diagram</b></summary>
 
 ```mermaid
 graph TD
@@ -53,12 +82,7 @@ graph TD
         VecSvc --- FAISS[(FAISS Index)]
     end
 ```
-
-### 📺 System Demonstration
-
-[![Image Annotation System Demo](https://img.youtube.com/vi/Hdd5vcPGQpM/0.jpg)](https://www.youtube.com/watch?v=Hdd5vcPGQpM)
-
-*Click the image above to watch the system in action.*
+</details>
 
 ### Technology Breakdown
 
