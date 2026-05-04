@@ -148,7 +148,39 @@ python3 services/cli/main.py upload sample_data/dog.jpg
 python3 services/cli/main.py search "a dog in a park"
 ```
 
-## 📡 Event Lifecycle
+## 🧪 Testing
+
+The system uses **pytest** for both unit and integration testing.
+
+### 1. Run All Tests
+To run the entire suite (unit + pipeline integration):
+```bash
+pytest
+```
+
+### 2. Service-Specific Tests
+You can run tests for individual microservices:
+```bash
+# Test the Upload Service
+pytest services/upload/tests
+
+# Test the Vector DB Service
+pytest services/vector_db/tests
+```
+
+### 3. Integration & Pipeline Tests
+These tests verify the end-to-end event flow using `fakeredis`:
+```bash
+pytest tests/test_full_pipeline.py
+```
+
+### 4. Test Environment
+Tests are designed to be safe:
+- **Mocking**: Most tests use `fakeredis` and mock AI responses to avoid needing a live Redis server or API credits.
+- **Cleanup**: Temporary FAISS indices and test images are automatically cleaned up after test execution.
+
+## 📡 Redis Channels
+
 
 ### Indexing Pipeline
 1.  **`upload.requested`**: CLI requests an image to be ingested.
