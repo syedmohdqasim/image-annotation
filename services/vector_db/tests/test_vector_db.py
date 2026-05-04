@@ -12,9 +12,12 @@ def mock_bus():
 @pytest.fixture
 def test_index_path():
     path = "tests/test_vec.index"
+    map_path = "tests/test_vec_map.json"
     if os.path.exists(path): os.remove(path)
+    if os.path.exists(map_path): os.remove(map_path)
     yield path
     if os.path.exists(path): os.remove(path)
+    if os.path.exists(map_path): os.remove(map_path)
 
 def test_handle_vectors_created_indexes_and_publishes(mock_bus, test_index_path):
     svc = VectorDBService(index_path=test_index_path, bus=mock_bus)
