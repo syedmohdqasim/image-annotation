@@ -7,7 +7,7 @@ A modular, event-driven system for processing images, detecting objects, and ena
 ### High-Level Workflow
 ```mermaid
 graph TD
-    CLI((User/CLI)) <--> Bus{Redis Event Bus}
+    CLI((User/CLI)) <--> Bus{Local Redis Bus}
     
     Bus <--> Upload[Upload Service]
     Bus <--> Proc[Image Processing]
@@ -18,7 +18,7 @@ graph TD
     subgraph "Storage & AI"
         Proc --- Gemini((Gemini 1.5))
         VecDB --- FAISS[(FAISS Index)]
-        DocDB --- JSON[(JSON DB)]
+        DocDB --- Mongo[(MongoDB)]
     end
 ```
 
@@ -32,7 +32,7 @@ graph TD
 
 ## 📡 Detailed Event Flow
 
-The system is built on a **Pub-Sub** architecture using **Redis**. Services are strictly decoupled and communicate exclusively through the event bus.
+The system is built on a **Pub-Sub** architecture using a **local Redis instance**. Services are strictly decoupled and communicate exclusively through the event bus.
 
 <details>
 <summary><b>View Detailed System Diagram</b></summary>
@@ -41,7 +41,7 @@ The system is built on a **Pub-Sub** architecture using **Redis**. Services are 
 graph TD
     CLI((CLI)) -->|1. upload.requested| Bus
     
-    subgraph "Event Bus (Redis)"
+    subgraph "Event Bus (Local Redis)"
         Bus{Redis Pub/Sub}
     end
 
@@ -78,7 +78,7 @@ graph TD
 
     subgraph "Data Ownership"
         Upload --- ImgStore[(image_store)]
-        DocSvc --- JSONDB[(JSON File DB)]
+        DocSvc --- Mongo[(MongoDB)]
         VecSvc --- FAISS[(FAISS Index)]
     end
 ```
@@ -91,10 +91,10 @@ graph TD
 | **CLI** | **Python Typer** | Entry point for requesting uploads and searching. |
 | **Upload** | **Python** | Listens for requests, saves images to `image_store`. |
 | **Image Processing**| **Gemini 1.5 Flash** | Generates image descriptions and detects objects. |
-| **Document DB** | **JSON/File** | Stores metadata, detections, and resolves search results. |
+| **Document DB** | **MongoDB** | Stores metadata, detections, and resolves search results. |
 | **Embedding** | **Deterministic Hashing**| Generates vectors for descriptions and search queries. |
 | **Vector DB** | **FAISS** | Maintains similarity index and performs vector lookups. |
-| Event Bus | **Redis** | Orchestrates asynchronous communication. |
+| Event Bus | **Redis (Local)** | Orchestrates asynchronous communication. |
 
 ## 🧠 Vector Search with FAISS
 
@@ -111,13 +111,22 @@ The system leverages **FAISS (Facebook AI Similarity Search)** to enable high-pe
 
 ### 1. Prerequisites
 - **Python 3.10+**
-- **Redis Server**
+- **Redis Server** (Local instance for demo)
+- **MongoDB** (Local or Atlas instance)
 - **Google API Key** (Optional, for Gemini features)
 
 ### 2. Setup Environment
+Copy the example environment file and fill in your credentials:
+```bash
+cp .env.example .env
+```
+Key variables in `.env`:
+- `GOOGLE_API_KEY`: Required for Gemini AI features.
+- `REDIS_HOST`/`REDIS_PORT`: Connection for the local Redis bus.
+- `MONGODB_URI`: Connection string for MongoDB.
+
 ```bash
 pip install -r requirements.txt
-export GOOGLE_API_KEY="your_key_here"
 ```
 
 ### 3. Running the System
