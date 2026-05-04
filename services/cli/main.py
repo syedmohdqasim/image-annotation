@@ -6,6 +6,7 @@ import typer
 from services.upload.service import UploadService
 from common.bus import EventBus
 from common.schemas.events import QuerySubmittedEvent, QuerySubmittedPayload, EventType, UploadRequestedEvent, UploadRequestedPayload
+import climage
 
 app = typer.Typer()
 
@@ -73,6 +74,17 @@ def search(query: str, query_type: str = "text"):
             typer.echo(f"Image ID: {res['image_id']} | Score: {res['score']:.2f} | Matched: {matched_as}")
             typer.echo(f"  Description: {desc}")
             typer.echo(f"  Path: {path}")
+            
+            if os.path.exists(path):
+                try:
+                    # width=40, is_unicode=True for better quality block characters
+                    output = climage.convert(path, width=40, is_unicode=True)
+                    typer.echo(output)
+                except Exception as e:
+                    typer.echo(f"  (Could not render image: {e})")
+            else:
+                typer.echo("  (Image file not found on disk)")
+            
             typer.echo("-" * 40)
     else:
         typer.echo("Search timed out.")

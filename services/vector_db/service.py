@@ -2,6 +2,7 @@ import logging
 import faiss
 import numpy as np
 import os
+import json
 from common.bus import EventBus
 from common.schemas.events import (
     EventType, 
@@ -18,9 +19,10 @@ class VectorDBService:
     def __init__(self, dimension: int = 3072, index_path: str = "services/vector_db/faiss.index", bus: EventBus = None):
         self.dimension = dimension
         self.index_path = index_path
+        self.map_path = index_path.replace(".index", "_map.json")
         self.bus = bus or EventBus()
         self.index = self._load_index()
-        self.id_map = {} # internal_id -> {image_id, label}
+        self.id_map = self._load_map()
 
     def _load_index(self):
         if os.path.exists(self.index_path):
@@ -32,10 +34,26 @@ class VectorDBService:
             except Exception as e:
                 logger.error(f"Error loading index: {e}")
         
-        return faiss.IndexFlatL2(self.dimension)
+        # Use Inner Product (equivalent to Cosine Similarity for normalized vectors)
+        return faiss.IndexFlatIP(self.dimension)
+
+    def _load_map(self):
+        if os.path.exists(self.map_path):
+            try:
+                with open(self.map_path, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"Error loading id_map: {e}")
+        return {}
 
     def _save_index(self):
         faiss.write_index(self.index, self.index_path)
+        with open(self.map_path, "w") as f:
+            json.dump(self.id_map, f)
+
+    def _is_image_indexed(self, image_id: str) -> bool:
+        """Checks if any vector in the map belongs to this image_id."""
+        return any(meta["image_id"] == image_id for meta in self.id_map.values())
 
     def run(self):
         """Starts the service, listening for vector creation and query embedding events."""
@@ -56,6 +74,11 @@ class VectorDBService:
             logger.warning(f"No vectors received for image {image_id}")
             return
 
+        # Idempotency check: Don't index the same image twice
+        if self._is_image_indexed(image_id):
+            logger.info(f"Image {image_id} already indexed. Skipping.")
+            return
+
         logger.info(f"Indexing {len(vectors_list)} vectors for image: {image_id}")
         vectors = np.array(vectors_list).astype('float32')
         
@@ -63,6 +86,9 @@ class VectorDBService:
         if vectors.shape[1] != self.dimension:
             logger.error(f"Vector dimension mismatch: expected {self.dimension}, got {vectors.shape[1]}")
             return
+
+        # Normalize for cosine similarity
+        faiss.normalize_L2(vectors)
 
         start_id = self.index.ntotal
         for i in range(len(vectors_list)):
@@ -88,12 +114,15 @@ class VectorDBService:
         
         logger.info(f"Performing multi-vector similarity search for query: {query_id}")
 
-        # FAISS search - find top 10 matches across all vectors
-        k = 10
+        # Normalize query vector for cosine similarity
+        faiss.normalize_L2(query_vector)
+
+        # FAISS search - find top 20 matches across all vectors
+        k = 20
         D, I = self.index.search(query_vector, k)
         
-        matches = []
-        seen_images = set()
+        # Group by image_id and keep the best score
+        best_matches = {} # image_id -> match_info
         
         for i, idx in enumerate(I[0]):
             if idx == -1: continue
@@ -101,15 +130,20 @@ class VectorDBService:
             if meta:
                 image_id = meta["image_id"]
                 label = meta["label"]
+                score = float(D[0][i]) # IP for normalized vectors is cosine similarity
                 
-                # We can return all matches, or group them. 
-                # Let's keep all for now so Document DB can see which part matched.
-                score = max(0, 1.0 - (float(D[0][i]) / 10.0))
-                matches.append({
-                    "image_id": image_id,
-                    "matched_label": label,
-                    "score": score
-                })
+                # Threshold for relevance (0.3 is conservative for cosine sim)
+                if score < 0.3: continue
+
+                if image_id not in best_matches or score > best_matches[image_id]["score"]:
+                    best_matches[image_id] = {
+                        "image_id": image_id,
+                        "matched_label": label,
+                        "score": score
+                    }
+
+        # Convert back to list and sort by score
+        matches = sorted(best_matches.values(), key=lambda x: x["score"], reverse=True)
 
         event = SimilarityMatchedEvent(
             payload=SimilarityMatchedPayload(
@@ -118,7 +152,7 @@ class VectorDBService:
             )
         )
         self.bus.publish(event)
-        logger.info(f"Published similarity.matched for {query_id}")
+        logger.info(f"Published similarity.matched for {query_id} with {len(matches)} results")
 
 if __name__ == "__main__":
     svc = VectorDBService()

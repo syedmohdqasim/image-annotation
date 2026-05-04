@@ -126,6 +126,24 @@ python3 services/cli/main.py search "a dog in a park"
 3.  **`similarity.matched`**: Vector DB finds the most similar image IDs.
 4.  **`query.completed`**: Document DB resolves image IDs to full metadata and returns to CLI.
 
+## 📡 Redis Channels
+
+The system uses specific Redis channels (topics) for all inter-service communication. These channel names map directly to the `EventType` values.
+
+| Redis Channel | Publisher | Subscriber(s) |
+| :--- | :--- | :--- |
+| **`upload.requested`** | CLI | Upload Service |
+| **`image.submitted`** | Upload Service | Image Processing, Document DB |
+| **`image.described`** | Image Processing | Embedding Service, Document DB |
+| **`objects.detected`** | Image Processing | Document DB |
+| **`vectors.created`** | Embedding Service | Vector DB, Document DB |
+| **`indexing.completed`**| Vector DB | CLI (optional status) |
+| **`metadata.persisted`**| Document DB | CLI (optional status) |
+| **`query.submitted`** | CLI | Embedding Service |
+| **`query.embedded`** | Embedding Service | Vector DB |
+| **`similarity.matched`**| Vector DB | Document DB |
+| **`query.completed`** | Document DB | CLI |
+
 ## 🛠 Directory Structure
 
 ```text
