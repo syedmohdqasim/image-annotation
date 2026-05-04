@@ -54,6 +54,12 @@ graph TD
     end
 ```
 
+### 📺 System Demonstration
+
+[![Image Annotation System Demo](https://img.youtube.com/vi/Hdd5vcPGQpM/0.jpg)](https://www.youtube.com/watch?v=Hdd5vcPGQpM)
+
+*Click the image above to watch the system in action.*
+
 ### Technology Breakdown
 
 | Service | Technology | Role |
